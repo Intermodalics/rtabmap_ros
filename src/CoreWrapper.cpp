@@ -129,6 +129,7 @@ void CoreWrapper::onInit()
 	mapsManager_.init(nh, pnh, getName(), true);
 
 	bool publishTf = true;
+	bool publishInverseTf = false;
 	double tfDelay = 0.05; // 20 Hz
 	double tfTolerance = 0.1; // 100 ms
 
@@ -148,6 +149,7 @@ void CoreWrapper::onInit()
 	}
 
 	pnh.param("publish_tf",          publishTf, publishTf);
+	pnh.param("publish_odom_to_map_transform", publishInverseTf, publishInverseTf);
 	pnh.param("tf_delay",            tfDelay, tfDelay);
 	if(pnh.hasParam("tf_prefix"))
 	{
@@ -195,6 +197,8 @@ void CoreWrapper::onInit()
 				groundTruthBaseFrameId_.c_str());
 	}
 	NODELET_INFO("rtabmap: map_frame_id  = %s", mapFrameId_.c_str());
+	NODELET_INFO("rtabmap: publish_tf    = %s", publishTf?"true":"false");
+	NODELET_INFO("rtabmap: publish_odom_to_map_transform = %s", publishInverseTf?"true":"false");
 	NODELET_INFO("rtabmap: tf_delay      = %f", tfDelay);
 	NODELET_INFO("rtabmap: tf_tolerance  = %f", tfTolerance);
 	NODELET_INFO("rtabmap: odom_sensor_sync   = %s", odomSensorSync_?"true":"false");
@@ -546,7 +550,7 @@ void CoreWrapper::onInit()
 	if(publishTf && optimizeIterations != 0)
 	{
 		tfThreadRunning_ = true;
-		transformThread_ = new boost::thread(boost::bind(&CoreWrapper::publishLoop, this, tfDelay, tfTolerance));
+		transformThread_ = new boost::thread(boost::bind(&CoreWrapper::publishLoop, this, tfDelay, tfTolerance, publishInverseTf));
 	}
 	else if(publishTf)
 	{
@@ -711,7 +715,7 @@ void CoreWrapper::saveParameters(const std::string & configFile)
 	}
 }
 
-void CoreWrapper::publishLoop(double tfDelay, double tfTolerance)
+void CoreWrapper::publishLoop(double tfDelay, double tfTolerance, bool publishInverseTf)
 {
 	if(tfDelay == 0)
 		return;
@@ -723,10 +727,16 @@ void CoreWrapper::publishLoop(double tfDelay, double tfTolerance)
 			mapToOdomMutex_.lock();
 			ros::Time tfExpiration = ros::Time::now() + ros::Duration(tfTolerance);
 			geometry_msgs::TransformStamped msg;
-			msg.child_frame_id = odomFrameId_;
-			msg.header.frame_id = mapFrameId_;
 			msg.header.stamp = tfExpiration;
-			rtabmap_ros::transformToGeometryMsg(mapToOdom_, msg.transform);
+			if (!publishInverseTf) {
+				msg.child_frame_id = odomFrameId_;
+				msg.header.frame_id = mapFrameId_;
+				rtabmap_ros::transformToGeometryMsg(mapToOdom_, msg.transform);
+			} else {
+				msg.child_frame_id = mapFrameId_;
+				msg.header.frame_id = odomFrameId_;
+				rtabmap_ros::transformToGeometryMsg(mapToOdom_.inverse(), msg.transform);
+			}
 			tfBroadcaster_.sendTransform(msg);
 			mapToOdomMutex_.unlock();
 		}

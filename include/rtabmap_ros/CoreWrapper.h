@@ -165,7 +165,7 @@ private:
 	void loadParameters(const std::string & configFile, rtabmap::ParametersMap & parameters);
 	void saveParameters(const std::string & configFile);
 
-	void publishLoop(double tfDelay, double tfTolerance);
+	void publishLoop(double tfDelay, double tfTolerance, bool publishInverseTf);
 
 	void publishStats(const ros::Time & stamp);
 	void publishCurrentGoal(const ros::Time & stamp);
